@@ -295,7 +295,7 @@ This structure lowers cognitive overhead and improves reliability.
       "validation": {
         "email": {
           "value": "wrong@example.com",
-          "is_error": true,
+          "isError": true,
           "messages": ["Invalid email format"],
           "origin": "server"
         }
