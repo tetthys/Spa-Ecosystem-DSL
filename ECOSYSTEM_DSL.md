@@ -1,60 +1,74 @@
-# ECOSYSTEM_DSL
+# **Tetthys SPA DSL Specification (Redesigned)**
 
-This document defines the unified **SPA DSL (Domain-Specific Language)** used within the Tetthys SPA ecosystem.  
-It provides a consistent, extensible, and reusable structure for exchanging data between server and client.  
-All client-side logic that consumes SPA-related data should interpret the DSL according to this specification.
+*(Based on maintainability, structure, and UI DSL principles from the design report)*
 
 ---
 
-## 1. Design Goals
+# **Table of Contents**
 
-The DSL is designed with the following principles:
+1. **Introduction**
+2. **1. Definition**
 
-1. **Extensibility**  
-   New domains—UI state, pagination, forms, resources—can be added without breaking the structure.
+   * 1.1 Navigation
+   * 1.2 View
+   * 1.3 UI State
+   * 1.4 Forms
+   * 1.5 Pagination
+   * 1.6 Resources
+   * 1.7 Flash
+   * 1.8 Meta
+3. **2. Explanation**
 
-2. **Generality**  
-   The DSL must describe navigation, view selection, form state, UI state, flash messages, and other backend-driven UI data in one unified container.
+   * 2.1 Convention Over Configuration
+   * 2.2 Separation of Concerns
+   * 2.3 Component-Based UI Architecture
+   * 2.4 Developer Experience
+4. **3. Examples**
 
-3. **Reusability**  
-   Different parts of the application can interpret relevant DSL sections while sharing a single standard format.
-
-4. **Stable interpretation**  
-   Rules such as initial value priority (`old > request > injected > initial`) are clearly defined so that only adapters need modification if server-side formats change.
+   * 3.1 Redirect with view props
+   * 3.2 Form validation example
+   * 3.3 UI state example
+   * 3.4 Paginated list example
+5. **Conclusion**
 
 ---
 
-## 2. Top-Level DSL Structure
+# **Introduction**
 
-The complete DSL object has the following shape:
+This document defines the **unified, maintainable, extensible DSL** used across the Tetthys SPA ecosystem.
+It incorporates the structural recommendations made in the design report, including strong conventions, clear schema boundaries, component-friendly separation, and long-term maintainability.
+
+The DSL is a single JSON document sent from the backend to the frontend, expressing UI/navigation intent and providing structured UI data.
+
+---
+
+# **1. Definition**
+
+The DSL is a standardized object containing eight well-defined sections:
 
 ```ts
 type SpaDsl = {
-  navigation?: {
-    action: "redirect" | "back";
-    target?: string;
-  } | undefined;
-
-  view?: {
-    key: string;
-    props: Record<string, any>;
-  } | undefined;
-
-  payload: Record<string, any>;
-
-  flash: Record<string, any>;
-
-  meta: Record<string, any>;
+  navigation?: Navigation | undefined;
+  view?: View | undefined;
+  ui: UiState;
+  forms: FormsState;
+  pagination: PaginationState;
+  resources: ResourceMap;
+  flash: FlashState;
+  meta: MetaState;
 };
-````
+```
 
-Default empty DSL:
+A minimal DSL is:
 
 ```json
 {
   "navigation": undefined,
   "view": undefined,
-  "payload": {},
+  "ui": {},
+  "forms": {},
+  "pagination": {},
+  "resources": {},
   "flash": {},
   "meta": {}
 }
@@ -62,341 +76,308 @@ Default empty DSL:
 
 ---
 
-## 3. Meaning of Top-Level Sections
-
-### 3.1 `navigation`
-
-Represents navigation intent.
+## **1.1 Navigation**
 
 ```ts
 type Navigation =
-  | { action: "redirect"; target: string }
+  | { action: "redirect"; key: string }
   | { action: "back" };
 ```
 
-* `redirect` → Client resolves `target` using its own route map.
-* `back` → Client performs history-style backward navigation.
+Represents the server’s navigation intention.
 
-### 3.2 `view`
+---
 
-A hint telling the client which view to render.
+## **1.2 View**
 
 ```ts
 type View = {
-  key: string;               // client resolves this using its view map
-  props: Record<string, any>; // injected props for that view
+  key: string;
+  props: Record<string, any>;
 };
 ```
 
-Example:
+Determines which UI view to render and what props to inject.
+
+---
+
+## **1.3 UI State**
+
+```ts
+type UiState = {
+  [key: string]: any;
+};
+```
+
+Represents UI-layer state (modals, popovers, layout flags, etc.).
+
+---
+
+## **1.4 Forms**
+
+```ts
+type FormState = {
+  old?: Record<string, any>;
+  request?: Record<string, any>;
+  injected?: Record<string, any>;
+  validation?: ValidationMap;
+};
+
+type FormsState = {
+  [formKey: string]: FormState;
+};
+```
+
+**Value resolution priority**:
+
+> **old > request > injected > initial(component)**
+
+---
+
+## **1.5 Pagination**
+
+```ts
+type PaginationState = {
+  [resource: string]: {
+    page: number;
+    perPage: number;
+    total: number;
+  };
+};
+```
+
+Standardized server-driven pagination metadata.
+
+---
+
+## **1.6 Resources**
+
+```ts
+type ResourceMap = {
+  [resourceName: string]: any;
+};
+```
+
+Holds server-provided domain objects or lists.
+
+---
+
+## **1.7 Flash**
+
+```ts
+type FlashState = {
+  messages: Array<{ type: string; text: string }>;
+};
+```
+
+One-time notification messages.
+
+---
+
+## **1.8 Meta**
+
+```ts
+type MetaState = {
+  requestId?: string;
+  timestamp?: string;
+  dslVersion?: string;
+};
+```
+
+Tracing and diagnostic information.
+
+---
+
+# **2. Explanation**
+
+---
+
+## **2.1 Convention Over Configuration**
+
+The design report emphasizes predictable structure and strong conventions.
+Thus, all DSL documents use fixed top-level keys:
+
+```
+navigation, view, ui, forms, pagination, resources, flash, meta
+```
+
+This removes ambiguity and simplifies tooling.
+
+---
+
+## **2.2 Separation of Concerns**
+
+Each section has one job:
+
+* **navigation** controls how to move
+* **view** describes what to show
+* **ui** represents client UI state
+* **forms** handles field states/validation
+* **pagination** is resource metadata
+* **resources** carry domain data
+* **flash** contains ephemeral messages
+* **meta** includes diagnostics
+
+This makes each subsystem trivial to implement and extend.
+
+---
+
+## **2.3 Component-Based UI Architecture**
+
+The design report stresses UI componentization.
+The redesigned DSL supports this by:
+
+* letting server provide only **data**, not layout
+* keeping view logic under `view.key + view.props`
+* segregating form logic, ui logic, and content logic
+
+This model is ideal for React-based component trees.
+
+---
+
+## **2.4 Developer Experience**
+
+* DSL schema is simple and stable
+* Extensions happen inside clear namespaces (`ui`, `forms`, etc.)
+* `dslVersion` enables backward compatibility
+* Easy to validate and test
+
+This structure lowers cognitive overhead and improves reliability.
+
+---
+
+# **3. Examples**
+
+---
+
+## **3.1 Redirect with view props**
+
+```json
+{
+  "navigation": {
+    "action": "redirect",
+    "key": "users.index"
+  },
+  "view": {
+    "key": "UsersPage",
+    "props": { "tab": "active", "layout": "card" }
+  },
+  "ui": {},
+  "forms": {},
+  "pagination": {},
+  "resources": {},
+  "flash": {},
+  "meta": {
+    "requestId": "abc-123",
+    "dslVersion": "1.0.0"
+  }
+}
+```
+
+---
+
+## **3.2 Form validation**
+
+```json
+{
+  "navigation": {
+    "action": "redirect",
+    "key": "user.register"
+  },
+  "view": {
+    "key": "UserRegisterView",
+    "props": {}
+  },
+  "forms": {
+    "user.register": {
+      "old": { "email": "wrong@example.com" },
+      "injected": { "country": "KR" },
+      "validation": {
+        "email": {
+          "value": "wrong@example.com",
+          "is_error": true,
+          "messages": ["Invalid email format"],
+          "origin": "server"
+        }
+      }
+    }
+  },
+  "ui": {},
+  "resources": {},
+  "pagination": {},
+  "flash": {},
+  "meta": {
+    "requestId": "req-742",
+    "timestamp": "2025-11-27T10:30:00Z"
+  }
+}
+```
+
+---
+
+## **3.3 UI state update**
 
 ```json
 {
   "view": {
-    "key": "UserIndex",
-    "props": { "tab": "active" }
-  }
-}
-```
-
-### 3.3 `payload`
-
-The main container for domain data:
-
-* Form state
-* UI state
-* Pagination information
-* Resource lists
-* Any additional server-provided data
-
-It is intentionally generic so that new namespaces can be added as needed.
-
-### 3.4 `flash`
-
-Short-lived, one-time messages.
-
-```json
-{
-  "flash": {
-    "message": "Saved successfully",
-    "level": "success"
-  }
-}
-```
-
-Or multi-message:
-
-```json
-{
-  "flash": {
-    "messages": [
-      { "type": "success", "text": "Saved" },
-      { "type": "info", "text": "Profile updated" }
+    "key": "UserDetailView",
+    "props": {}
+  },
+  "ui": {
+    "modal": "userDetail",
+    "modalArgs": { "userId": 14 }
+  },
+  "resources": {
+    "users": [
+      { "id": 14, "name": "Alice" }
     ]
-  }
+  },
+  "forms": {},
+  "pagination": {},
+  "flash": {},
+  "meta": {}
 }
 ```
 
-### 3.5 `meta`
+---
 
-Non-UI metadata for tracing, logging, and debugging.
+## **3.4 Paginated list**
 
 ```json
 {
-  "meta": {
-    "requestId": "req-123",
-    "timestamp": "2025-11-27T10:00:00Z"
-  }
-}
-```
-
----
-
-## 4. Standard Payload Namespaces
-
-Within `payload`, the following namespaces are considered standard:
-
-* `payload.forms`
-  Form states: values, validation, old/request/injected inputs.
-
-* `payload.ui`
-  UI state such as modal visibility, popover state, layout preferences.
-
-* `payload.pagination`
-  Pagination metadata for resources.
-
-* `payload.resources`
-  Server-provided lists: users, posts, products, etc.
-
-Additional namespaces may be added as needed.
-
----
-
-## 5. Form DSL: `payload.forms`
-
-Each form is identified by a form key:
-
-```ts
-type SpaFormPayload = {
-  old?: Record<string, any>;
-  request?: Record<string, any>;
-  injected?: Record<string, any>;
-  validation?: Record<
-    string,
-    {
-      value: any;
-      is_error: boolean;
-      messages: string[];
-      origin?: string;
+  "view": {
+    "key": "UserList",
+    "props": {}
+  },
+  "pagination": {
+    "users": {
+      "page": 2,
+      "perPage": 20,
+      "total": 442
     }
-  >;
-};
-```
-
-Example:
-
-```json
-{
-  "payload": {
-    "forms": {
-      "user.register": {
-        "old": { "email": "old@example.com" },
-        "request": { "email": "request@example.com" },
-        "injected": { "email": "injected@example.com" },
-        "validation": {
-          "email": {
-            "value": "invalid@example.com",
-            "is_error": true,
-            "messages": ["Invalid email."],
-            "origin": "server"
-          }
-        }
-      }
-    }
-  }
+  },
+  "resources": {
+    "users": [
+      { "id": 1, "name": "A" },
+      { "id": 2, "name": "B" }
+    ]
+  },
+  "ui": {},
+  "forms": {},
+  "flash": {},
+  "meta": {}
 }
 ```
 
-### 5.1 Initial Value Priority
-
-For each field:
-
-> **old > request > injected > initial (component-level)**
-
-This rule is implemented in a central helper (e.g., `resolveInitialValues`) so that UI components remain clean and unaffected by backend schema changes.
-
 ---
 
-## 6. UI State DSL: `payload.ui`
+# **Conclusion**
 
-UI-related state is placed in `payload.ui`.
+This redesigned DSL:
 
-Example:
-
-```json
-{
-  "payload": {
-    "ui": {
-      "isMainPopoverOpen": true,
-      "activeModal": "userDetail"
-    }
-  }
-}
-```
-
-UI states can grow freely inside this namespace.
-
-Builder sugar is recommended:
-
-```js
-withUi({ isMainPopoverOpen: true });
-```
-
-Maps to:
-
-```js
-with({ ui: { isMainPopoverOpen: true } });
-```
-
----
-
-## 7. Pagination DSL: `payload.pagination`
-
-Pagination data is placed inside `payload.pagination`.
-
-Example:
-
-```json
-{
-  "payload": {
-    "pagination": {
-      "users": { "page": 2, "perPage": 20, "total": 120 },
-      "orders": { "page": 1, "perPage": 10, "total": 42 }
-    }
-  }
-}
-```
-
-Builder sugar:
-
-```js
-withPagination({ users: { page: 2, perPage: 20, total: 120 } });
-```
-
----
-
-## 8. DSL Builder and Its Mapping
-
-A builder constructs the DSL step-by-step:
-
-```js
-router
-  .to("users.index")
-  .view("UserIndex")
-  .withViewProps({ tab: "active" })
-  .with({ ui: { isMainPopoverOpen: true } })
-  .withFlash({ message: "Welcome!" })
-  .withMeta({ requestId: "req-123" })
-  .send();
-```
-
-Mapping summary:
-
-| Builder Method    | DSL Effect                       |
-| ----------------- | -------------------------------- |
-| `to(key)`         | `navigation.action = "redirect"` |
-| `back()`          | `navigation.action = "back"`     |
-| `view(key)`       | `view.key = key`                 |
-| `withViewProps()` | merge into `view.props`          |
-| `with()`          | merge into `payload`             |
-| `withFlash()`     | merge into `flash`               |
-| `withMeta()`      | merge into `meta`                |
-| `build()`         | returns DSL without sending      |
-| `send()`          | sends DSL to the transport layer |
-
-Additional optional sugar:
-
-| Sugar Method       | DSL Mapping                 |
-| ------------------ | --------------------------- |
-| `withUi(obj)`      | `with({ ui: obj })`         |
-| `withPagination()` | `with({ pagination: obj })` |
-
----
-
-## 9. Interpretation Rules (Client-Side)
-
-Different parts of the client interpret relevant DSL portions:
-
-* Navigation logic reads `navigation` and `view`.
-* Form logic reads `payload.forms`.
-* UI state logic reads `payload.ui`.
-* Pagination logic reads `payload.pagination`.
-* Flash logic reads `flash`.
-* Logging/debugging reads `meta`.
-
-Each domain is isolated and interprets only the fields it needs.
-
----
-
-## 10. Extension Rules
-
-When extending DSL capabilities:
-
-### 10.1 Avoid adding new top-level keys
-
-Prefer adding namespaces under `payload`:
-
-```json
-{
-  "payload": {
-    "notifications": [...],
-    "filters": {...}
-  }
-}
-```
-
-### 10.2 Use descriptive namespace names
-
-Examples of good patterns:
-
-* `forms`
-* `ui`
-* `pagination`
-* `resources`
-* `filters`
-* `notifications`
-
-### 10.3 Centralize interpretation logic
-
-Helpers should encapsulate rules such as:
-
-* initial value resolution
-* validation conversion
-* payload → UI props transformation
-
----
-
-## 11. Versioning Guidance
-
-If DSL evolves:
-
-* Adding fields → non-breaking.
-* Renaming/removing fields → breaking.
-
-Optional DSL version:
-
-```json
-{
-  "meta": {
-    "requestId": "req-123",
-    "dslVersion": "0.2.0"
-  }
-}
-```
-
-Clients may support multiple versions if necessary.
-
----
-
-This document defines the unified DSL standard for the Tetthys SPA ecosystem.
-Additional domain-specific documents (e.g., form DSL, router behaviors) may be created on top of this base specification.
+* follows the structural and maintainability guidelines suggested in the report
+* offers clear separation of concerns
+* supports a modern component-based UI architecture
+* remains stable while being highly extensible
+* provides a predictable developer experience
+* is fully future-safe with versioning and standardized namespaces
